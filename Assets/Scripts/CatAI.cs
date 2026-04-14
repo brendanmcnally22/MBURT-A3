@@ -7,30 +7,36 @@ public class CatAI : MonoBehaviour
     {
         Patrol,
         Chase,
-        Search,
-        Attack,
-        Rest
+        Search
     }
 
     public State currentState;
 
+    [Header("References")]
     public NavMeshAgent agent;
+    public Transform player;
     public Transform[] patrolPoints;
-    public Transform mouse;
 
+    [Header("Movement")]
     public float patrolSpeed = 3.5f;
     public float chaseSpeed = 6f;
 
+    [Header("Detection")]
     public float visionRange = 10f;
-    public float attackRange = 1.6f;
+    public float catchRange = 1.5f;
+
+    [Header("Search")]
     public float searchDuration = 4f;
 
-    private int patrolIndex = 0;
-    private float timer;
+    int patrolIndex = 0;
+    float timer;
+    Vector3 lastSeenPos;
 
     void Start()
     {
-        agent = GetComponent<NavMeshAgent>();
+        if (agent == null)
+            agent = GetComponent<NavMeshAgent>();
+
         ChangeState(State.Patrol);
     }
 
@@ -38,45 +44,50 @@ public class CatAI : MonoBehaviour
     {
         switch (currentState)
         {
-            case State.Patrol: Patrol(); break;
-            case State.Chase: Chase(); break;
-            case State.Search: Search(); break;
-            case State.Attack: Attack(); break;
-            case State.Rest: Rest(); break;
+            case State.Patrol:
+                Patrol();
+                break;
+
+            case State.Chase:
+                Chase();
+                break;
+
+            case State.Search:
+                Search();
+                break;
         }
     }
 
     void Patrol()
     {
-        if (CanSeeMouse())
+        if (CanSeePlayer())
         {
             ChangeState(State.Chase);
             return;
         }
 
         if (!agent.pathPending && agent.remainingDistance < 0.5f)
-            NextPatrolPoint();
+        {
+            patrolIndex = (patrolIndex + 1) % patrolPoints.Length;
+            agent.SetDestination(patrolPoints[patrolIndex].position);
+        }
     }
 
     void Chase()
     {
-        if (mouse == null || !mouse.gameObject.activeSelf)
+        agent.SetDestination(player.position);
+        lastSeenPos = player.position;
+
+        float dist = Vector3.Distance(transform.position, player.position);
+
+        if (dist <= catchRange)
         {
-            ChangeState(State.Patrol);
+            GameManager.instance.ShowCaught();
+            enabled = false;
             return;
         }
 
-        agent.SetDestination(mouse.position);
-
-        float dist = Vector3.Distance(transform.position, mouse.position);
-
-        if (dist <= attackRange)
-        {
-            ChangeState(State.Attack);
-            return;
-        }
-
-        if (!CanSeeMouse())
+        if (!CanSeePlayer())
         {
             timer = searchDuration;
             ChangeState(State.Search);
@@ -85,9 +96,9 @@ public class CatAI : MonoBehaviour
 
     void Search()
     {
-        agent.SetDestination(mouse.position);
+        agent.SetDestination(lastSeenPos);
 
-        if (CanSeeMouse())
+        if (CanSeePlayer())
         {
             ChangeState(State.Chase);
             return;
@@ -99,44 +110,11 @@ public class CatAI : MonoBehaviour
             ChangeState(State.Patrol);
     }
 
-    void Attack()
+    bool CanSeePlayer()
     {
-        if (mouse != null && mouse.gameObject.activeSelf)
-        {
-            float dist = Vector3.Distance(transform.position, mouse.position);
+        if (player == null) return false;
 
-            if (dist <= attackRange)
-            {
-                Debug.Log("Cat caught mouse!");
-                mouse.gameObject.SetActive(false);
-            }
-        }
-
-        timer = 2f;
-        ChangeState(State.Rest);
-    }
-
-    void Rest()
-    {
-        timer -= Time.deltaTime;
-
-        if (timer <= 0f)
-            ChangeState(State.Patrol);
-    }
-
-    bool CanSeeMouse()
-    {
-        if (mouse == null || !mouse.gameObject.activeSelf) return false;
-
-        return Vector3.Distance(transform.position, mouse.position) <= visionRange;
-    }
-
-    void NextPatrolPoint()
-    {
-        if (patrolPoints.Length == 0) return;
-
-        agent.SetDestination(patrolPoints[patrolIndex].position);
-        patrolIndex = (patrolIndex + 1) % patrolPoints.Length;
+        return Vector3.Distance(transform.position, player.position) <= visionRange;
     }
 
     void ChangeState(State newState)
@@ -147,15 +125,12 @@ public class CatAI : MonoBehaviour
         {
             case State.Patrol:
                 agent.speed = patrolSpeed;
-                NextPatrolPoint();
+                if (patrolPoints.Length > 0)
+                    agent.SetDestination(patrolPoints[patrolIndex].position);
                 break;
 
             case State.Chase:
                 agent.speed = chaseSpeed;
-                break;
-
-            case State.Rest:
-                agent.ResetPath();
                 break;
         }
     }

@@ -1,19 +1,46 @@
 using UnityEngine;
+using TMPro;
 
 public class GameManager : MonoBehaviour
 {
     public static GameManager instance;
 
-    public int score = 0;
+    [Header("UI")]
+    public TextMeshProUGUI cheeseText;
+    public TextMeshProUGUI caughtText;
+
+    int cheeseCount = 0;
 
     void Awake()
     {
         instance = this;
     }
 
-    public void AddScore(int amount)
+    void Start()
     {
-        score += amount;
-        Debug.Log("Score: " + score);
+        UpdateCheeseUI();
+
+        if (caughtText != null)
+            caughtText.gameObject.SetActive(false);
+    }
+
+    public void AddCheese(int amount)
+    {
+        cheeseCount += amount;
+        UpdateCheeseUI();
+    }
+
+    void UpdateCheeseUI()
+    {
+        if (cheeseText != null)
+            cheeseText.text = "Cheese: " + cheeseCount;
+    }
+
+    public void ShowCaught()
+    {
+        if (caughtText != null)
+            caughtText.gameObject.SetActive(true);
+
+        Time.timeScale = 0f;
     }
 }
