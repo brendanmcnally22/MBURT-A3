@@ -3,135 +3,253 @@ using UnityEngine.AI;
 
 public class CatAI : MonoBehaviour
 {
-    public enum State
+    // ================= BASE STATE =================
+    public abstract class State
     {
-        Patrol,
-        Chase,
-        Search
+        protected CatAI ai;
+        public State(CatAI ai) { this.ai = ai; }
+
+        public virtual void Enter() { }
+        public virtual void Update() { }
+        public virtual void Exit() { }
     }
 
-    public State currentState;
+    // ================= STATES =================
+    State currentState;
 
-    [Header("References")]
+    HuntState huntState;
+    MeowState meowState;
+    SneakState sneakState;
+    ChaseState chaseState;
+    SearchState searchState;
+
+    // ================= COMPONENTS =================
     public NavMeshAgent agent;
     public Transform player;
-    public Transform[] patrolPoints;
+    public Transform[] huntPoints;
+    public AudioSource audioSource;
+    public AudioClip meowClip;
 
-    [Header("Movement")]
-    public float patrolSpeed = 3.5f;
+    // ================= SETTINGS =================
+    public float huntSpeed = 3.5f;
+    public float sneakSpeed = 2.5f;
     public float chaseSpeed = 6f;
 
-    [Header("Detection")]
-    public float visionRange = 10f;
-    public float catchRange = 1.5f;
+    public float viewRadius = 10f;
+    public float catchRange = 1.3f;
 
-    [Header("Search")]
-    public float searchDuration = 4f;
+    public float meowTime = 1.5f;
+    public float searchTime = 4f;
 
-    int patrolIndex = 0;
-    float timer;
-    Vector3 lastSeenPos;
+    public float memoryTime = 2f;
 
+    // ================= MEMORY =================
+    public Vector3 lastSeenPos;
+    public float sightMemory;
+
+    int huntIndex;
+
+    // ================= UNITY =================
     void Start()
     {
-        if (agent == null)
-            agent = GetComponent<NavMeshAgent>();
+        if (!agent) agent = GetComponent<NavMeshAgent>();
 
-        ChangeState(State.Patrol);
+        huntState = new HuntState(this);
+        meowState = new MeowState(this);
+        sneakState = new SneakState(this);
+        chaseState = new ChaseState(this);
+        searchState = new SearchState(this);
+
+        SwitchState(huntState);
     }
 
     void Update()
     {
-        switch (currentState)
-        {
-            case State.Patrol:
-                Patrol();
-                break;
-
-            case State.Chase:
-                Chase();
-                break;
-
-            case State.Search:
-                Search();
-                break;
-        }
+        currentState?.Update();
     }
 
-    void Patrol()
+    public void SwitchState(State newState)
     {
-        if (CanSeePlayer())
-        {
-            ChangeState(State.Chase);
-            return;
-        }
-
-        if (!agent.pathPending && agent.remainingDistance < 0.5f)
-        {
-            patrolIndex = (patrolIndex + 1) % patrolPoints.Length;
-            agent.SetDestination(patrolPoints[patrolIndex].position);
-        }
-    }
-
-    void Chase()
-    {
-        agent.SetDestination(player.position);
-        lastSeenPos = player.position;
-
-        float dist = Vector3.Distance(transform.position, player.position);
-
-        if (dist <= catchRange)
-        {
-            GameManager.instance.ShowCaught();
-            enabled = false;
-            return;
-        }
-
-        if (!CanSeePlayer())
-        {
-            timer = searchDuration;
-            ChangeState(State.Search);
-        }
-    }
-
-    void Search()
-    {
-        agent.SetDestination(lastSeenPos);
-
-        if (CanSeePlayer())
-        {
-            ChangeState(State.Chase);
-            return;
-        }
-
-        timer -= Time.deltaTime;
-
-        if (timer <= 0f)
-            ChangeState(State.Patrol);
-    }
-
-    bool CanSeePlayer()
-    {
-        if (player == null) return false;
-
-        return Vector3.Distance(transform.position, player.position) <= visionRange;
-    }
-
-    void ChangeState(State newState)
-    {
+        currentState?.Exit();
         currentState = newState;
+        currentState.Enter();
+    }
 
-        switch (newState)
+    // ================= HELPERS =================
+    public bool CanSeePlayer()
+    {
+        if (!player) return false;
+        return Vector3.Distance(transform.position, player.position) <= viewRadius;
+    }
+
+    public void MoveToNextPoint()
+    {
+        if (huntPoints.Length == 0) return;
+
+        huntIndex = (huntIndex + 1) % huntPoints.Length;
+        agent.SetDestination(huntPoints[huntIndex].position);
+    }
+
+    public void CatchPlayer()
+    {
+        Character c = player.GetComponent<Character>();
+        if (c) c.Caught();
+
+        if (GameManager.instance)
+            GameManager.instance.ShowCaught();
+    }
+
+    // ================= STATES =================
+
+    // -------- HUNT --------
+    class HuntState : State
+    {
+        public HuntState(CatAI ai) : base(ai) { }
+
+        public override void Enter()
         {
-            case State.Patrol:
-                agent.speed = patrolSpeed;
-                if (patrolPoints.Length > 0)
-                    agent.SetDestination(patrolPoints[patrolIndex].position);
-                break;
+            ai.agent.speed = ai.huntSpeed;
+            ai.MoveToNextPoint();
+        }
 
-            case State.Chase:
-                agent.speed = chaseSpeed;
-                break;
+        public override void Update()
+        {
+            if (ai.CanSeePlayer())
+            {
+                ai.SwitchState(ai.sneakState);
+                return;
+            }
+
+            if (!ai.agent.pathPending && ai.agent.remainingDistance < 0.5f)
+                ai.MoveToNextPoint();
+        }
+    }
+
+    // -------- MEOW --------
+    class MeowState : State
+    {
+        float t;
+
+        public MeowState(CatAI ai) : base(ai) { }
+
+        public override void Enter()
+        {
+            t = ai.meowTime;
+            ai.agent.ResetPath();
+
+            if (ai.audioSource && ai.meowClip)
+                ai.audioSource.PlayOneShot(ai.meowClip);
+        }
+
+        public override void Update()
+        {
+            if (ai.CanSeePlayer())
+            {
+                ai.SwitchState(ai.sneakState);
+                return;
+            }
+
+            t -= Time.deltaTime;
+            if (t <= 0)
+                ai.SwitchState(ai.huntState);
+        }
+    }
+
+    // -------- SNEAK --------
+    class SneakState : State
+    {
+        public SneakState(CatAI ai) : base(ai) { }
+
+        public override void Enter()
+        {
+            ai.agent.speed = ai.sneakSpeed;
+        }
+
+        public override void Update()
+        {
+            if (ai.CanSeePlayer())
+            {
+                ai.lastSeenPos = ai.player.position;
+                ai.sightMemory = ai.memoryTime;
+
+                ai.agent.SetDestination(ai.player.position);
+
+                float dist = Vector3.Distance(ai.transform.position, ai.player.position);
+                if (dist <= ai.catchRange)
+                    ai.SwitchState(ai.chaseState);
+            }
+            else
+            {
+                ai.sightMemory -= Time.deltaTime;
+
+                if (ai.sightMemory <= 0)
+                    ai.SwitchState(ai.searchState);
+            }
+        }
+    }
+
+    // -------- CHASE --------
+    class ChaseState : State
+    {
+        public ChaseState(CatAI ai) : base(ai) { }
+
+        public override void Enter()
+        {
+            ai.agent.speed = ai.chaseSpeed;
+        }
+
+        public override void Update()
+        {
+            if (ai.CanSeePlayer())
+            {
+                ai.lastSeenPos = ai.player.position;
+                ai.sightMemory = ai.memoryTime;
+
+                ai.agent.SetDestination(ai.player.position);
+
+                float dist = Vector3.Distance(ai.transform.position, ai.player.position);
+
+                if (dist <= ai.catchRange)
+                {
+                    ai.CatchPlayer();
+                }
+            }
+            else
+            {
+                ai.sightMemory -= Time.deltaTime;
+
+                if (ai.sightMemory <= 0)
+                    ai.SwitchState(ai.searchState);
+            }
+        }
+    }
+
+    // -------- SEARCH --------
+    class SearchState : State
+    {
+        float t;
+
+        public SearchState(CatAI ai) : base(ai) { }
+
+        public override void Enter()
+        {
+            t = ai.searchTime;
+            ai.agent.speed = ai.huntSpeed;
+            ai.agent.SetDestination(ai.lastSeenPos);
+        }
+
+        public override void Update()
+        {
+            if (ai.CanSeePlayer())
+            {
+                ai.SwitchState(ai.chaseState);
+                return;
+            }
+
+            t -= Time.deltaTime;
+
+            if (t <= 0)
+                ai.SwitchState(ai.huntState);
         }
     }
 }

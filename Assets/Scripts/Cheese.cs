@@ -2,8 +2,12 @@ using UnityEngine;
 
 public class Cheese : MonoBehaviour
 {
-    public void Collect()
+    private void OnTriggerEnter(Collider other)
     {
-        gameObject.SetActive(false);
+        if (other.CompareTag("Player"))
+        {
+            GameManager.instance.AddCheese(1);
+            gameObject.SetActive(false);
+        }
     }
 }

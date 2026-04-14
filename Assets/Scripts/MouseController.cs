@@ -10,6 +10,8 @@ public class Character : MonoBehaviour
     [Header("Optional Sprint")]
     public float sprintSpeed = 8f;
 
+    public bool inHome;
+
     CharacterController controller;
     PlayerInput playerInput;
 
@@ -31,11 +33,9 @@ public class Character : MonoBehaviour
 
     void PlayerMotion()
     {
-        // grounded reset
         if (controller.isGrounded && velocity.y < 0f)
             velocity.y = -2f;
 
-        // input
         Vector2 moveInput =
             playerInput.currentActionMap["Move"].ReadValue<Vector2>();
 
@@ -43,7 +43,6 @@ public class Character : MonoBehaviour
             Vector3.right * moveInput.x +
             Vector3.forward * moveInput.y;
 
-        // sprint check (optional if action exists)
         float speed = moveSpeed;
 
         if (playerInput.currentActionMap.FindAction("Sprint") != null)
@@ -54,13 +53,11 @@ public class Character : MonoBehaviour
 
         Vector3 moveVelocity = move * speed;
 
-        // gravity
         velocity.y += gravity * Time.deltaTime;
         moveVelocity.y = velocity.y;
 
         controller.Move(moveVelocity * Time.deltaTime);
 
-        // rotate toward move direction
         Vector3 flatVelocity =
             new Vector3(moveVelocity.x, 0f, moveVelocity.z);
 
@@ -74,6 +71,18 @@ public class Character : MonoBehaviour
                 targetRotation,
                 15f * Time.deltaTime);
         }
+    }
+
+    void OnTriggerEnter(Collider other)
+    {
+        if (other.CompareTag("Home"))
+            inHome = true;
+    }
+
+    void OnTriggerExit(Collider other)
+    {
+        if (other.CompareTag("Home"))
+            inHome = false;
     }
 
     public void Caught()
