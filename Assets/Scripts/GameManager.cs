@@ -13,6 +13,7 @@ public class GameManager : MonoBehaviour
 
     void Awake()
     {
+        // simple singleton setup because i only want one manager talking to the ui.
         instance = this;
     }
 
@@ -33,7 +34,7 @@ public class GameManager : MonoBehaviour
     void UpdateCheeseUI()
     {
         if (cheeseText != null)
-            cheeseText.text = "Cheese: " + cheeseCount;
+            cheeseText.text = "cheese: " + cheeseCount;
     }
 
     public void ShowCaught()
@@ -41,6 +42,7 @@ public class GameManager : MonoBehaviour
         if (caughtText != null)
             caughtText.gameObject.SetActive(true);
 
+        // freezing time here makes the fail state really obvious and stops extra weirdness after getting caught.
         Time.timeScale = 0f;
     }
 }
