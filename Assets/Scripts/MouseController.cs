@@ -26,7 +26,8 @@ public class Character : MonoBehaviour
 
     void Update()
     {
-        if (isCaught) return;
+        if (isCaught)
+            return;
 
         PlayerMotion();
     }
@@ -36,8 +37,8 @@ public class Character : MonoBehaviour
         if (controller.isGrounded && velocity.y < 0f)
             velocity.y = -2f;
 
-        Vector2 moveInput =
-            playerInput.currentActionMap["Move"].ReadValue<Vector2>();
+        // grabbing input straight from the action map so i can keep movement stuff in one place.
+        Vector2 moveInput = playerInput.currentActionMap["Move"].ReadValue<Vector2>();
 
         Vector3 move =
             Vector3.right * moveInput.x +
@@ -45,6 +46,7 @@ public class Character : MonoBehaviour
 
         float speed = moveSpeed;
 
+        // sprint is optional so i check if the action even exists first.
         if (playerInput.currentActionMap.FindAction("Sprint") != null)
         {
             if (playerInput.currentActionMap["Sprint"].IsPressed())
@@ -58,23 +60,25 @@ public class Character : MonoBehaviour
 
         controller.Move(moveVelocity * Time.deltaTime);
 
-        Vector3 flatVelocity =
-            new Vector3(moveVelocity.x, 0f, moveVelocity.z);
+        // this is just to make the player face where they are actually moving.
+        Vector3 flatVelocity = new Vector3(moveVelocity.x, 0f, moveVelocity.z);
 
         if (flatVelocity.sqrMagnitude > 0.001f)
         {
-            Quaternion targetRotation =
-                Quaternion.LookRotation(flatVelocity);
+            Quaternion targetRotation = Quaternion.LookRotation(flatVelocity);
 
             transform.rotation = Quaternion.Slerp(
                 transform.rotation,
                 targetRotation,
-                15f * Time.deltaTime);
+                15f * Time.deltaTime
+            );
         }
     }
 
     void OnTriggerEnter(Collider other)
     {
+        // home is important because the cat uses this to decide
+        // "ok you're probably hiding in there now."
         if (other.CompareTag("Home"))
             inHome = true;
     }
@@ -87,6 +91,7 @@ public class Character : MonoBehaviour
 
     public void Caught()
     {
+        // i disable the character after getting caught so the player doesn't keep moving during game over.
         isCaught = true;
         enabled = false;
     }
